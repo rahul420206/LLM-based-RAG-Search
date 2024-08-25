@@ -44,7 +44,7 @@ st.markdown("""
 
 st.title("LLM-based RAG Search")
 
-api_url = "https://your-backend-service.herokuapp.com/query"
+api_url = "http://localhost:5001/query"
 
 if 'response' not in st.session_state:
     st.session_state.response = ""
