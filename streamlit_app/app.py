@@ -4,6 +4,23 @@ import pyperclip
 from gtts import gTTS
 from io import BytesIO
 import re
+import cohere
+
+# Initialize Cohere client
+co = cohere.Client('evLatt2FuOBOJti8orWXbEoATx0NDUTGAkLcXRJO')
+
+def summarize_response(text):
+    # Check if text length is more than 250 characters
+    if len(text) > 250:
+        response = co.summarize(text=text, length='short')
+        return response.summary
+    else:
+        return text  # Return the text as is if it's too short
+
+def extract_key_points(text):
+    # Refined key points extraction
+    sentences = re.split(r'(?<!\b[A-Z])\.(?![A-Z]\b)', text)
+    return [sentence.strip() for sentence in sentences if len(sentence.strip()) > 10]  # Ensure points are long enough
 
 st.markdown("""
     <style>
@@ -48,6 +65,8 @@ api_url = "http://localhost:5001/query"
 
 if 'response' not in st.session_state:
     st.session_state.response = ""
+if 'full_response' not in st.session_state:
+    st.session_state.full_response = ""
 if 'key_points' not in st.session_state:
     st.session_state.key_points = []
 if 'history' not in st.session_state:
@@ -80,15 +99,24 @@ with button_col1:
             if len(ai_response.split()) < 5:
                 st.error("Response is too short. Please try again.")
             else:
-                st.session_state.response = ai_response
+                # Preserve the full response
+                st.session_state.full_response = ai_response
 
+                # Summarize the response if it's long enough
+                summarized_response = summarize_response(ai_response)
+                st.session_state.response = summarized_response
+
+                # Extract key points from the summarized response
+                st.session_state.key_points = extract_key_points(summarized_response)
+                
                 st.session_state.history.append({
                     "query": query, 
-                    "response": ai_response
+                    "response": summarized_response
                 })
-
-                key_points = re.split(r'(?<!\b[A-Z])\.(?![A-Z]\b)', ai_response)
-                st.session_state.key_points = [point.strip() for point in key_points if point]
+                
+                # Handle key points
+                if not st.session_state.key_points:
+                    st.session_state.key_points = extract_key_points(ai_response)  # Extract key points from full response
                 
                 if st.session_state.key_points:
                     st.session_state.key_points.pop()
@@ -98,20 +126,24 @@ with button_col1:
 with button_col2:
     if st.session_state.response and st.button("Clear Response"):
         st.session_state.response = ""
+        st.session_state.full_response = ""
         st.session_state.key_points = []
 
 if st.session_state.response:
     st.markdown("### Key Points:")
+
     if st.session_state.key_points:
+        # Show key points if they exist
         st.markdown("\n".join([f"- {point}" for point in st.session_state.key_points]))
     else:
-        st.write("No key points extracted.")
+        # No key points extracted, so show detailed response as key points
+        st.markdown(f"- {st.session_state.full_response}")
 
     if st.button("Copy to Clipboard"):
         pyperclip.copy(st.session_state.response)
         st.success("Response copied to clipboard!")
 
-    detailed_response = st.session_state.response
+    detailed_response = st.session_state.full_response
     if not detailed_response.endswith('.'):
         detailed_response += '.'
     with st.expander("View Detailed Response"):
